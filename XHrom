@@ -1932,171 +1932,241 @@ fill="none" stroke="currentColor" stroke-width="2">
         })();
     }
 
-    // ---- 11. API Purchase (исправлен) ----
-   // ---- 11. API Purchase (старый стиль) ----
-if (extEnabled(11)) {
-    (function() {
-        if (!location.pathname.startsWith('/catalog/')) return;
-        let apRetryTimer = null;
+// ---- 11. API Purchase (исправлен) ----
+(function () {
+    'use strict';
 
-        function getItemId() {
-            const m = location.pathname.match(/\/catalog\/(\d+)/);
-            return m ? m[1] : null;
+    let apObserver = null;
+    let apRetryTimer = null;
+    let apLastUrl = location.href;
+
+    const getItemId = () => {
+        const m = window.location.pathname.match(/\/catalog\/(\d+)/);
+        return m ? m[1] : null;
+    };
+
+    const getApCsrf = () => {
+        const cookies = document.cookie.split(';');
+        for (let cookie of cookies) {
+            const [name, value] = cookie.trim().split('=');
+            if (name.toLowerCase().includes('csrf')) return value;
         }
+        const meta = document.querySelector('meta[name="csrf-token"]');
+        return meta ? meta.getAttribute('content') : null;
+    };
 
-        function getCsrf() {
-            const m = document.cookie.match(/rbxcsrf4=([^;]+)/);
-            return m ? m[1] : null;
+    const getPrice = () => {
+        const label = document.querySelector('.priceLabel-0-2-61') || document.querySelector('[class*="priceLabel"]');
+        if (!label) return 0;
+        const text = label.textContent.trim();
+        const cleaned = text.replace(/[^\d]/g, '');
+        return cleaned ? parseInt(cleaned, 10) : 0;
+    };
+
+    const getSellerId = () => {
+        const sellerLink = document.querySelector('a[href*="/User.aspx?ID="]');
+        if (sellerLink) {
+            const match = sellerLink.href.match(/ID=(\d+)/);
+            if (match) return parseInt(match[1], 10);
         }
+        return 1;
+    };
 
-        function getPrice() {
-            // Ищем элемент с ценой
-            const priceEl = document.querySelector('.priceLabel-0-2-61, [class*="priceLabel"], .text-nowrap .text-white');
-            if (priceEl) {
-                const text = priceEl.textContent.trim();
-                const num = text.replace(/[^0-9]/g, '');
-                return parseInt(num, 10) || 0;
-            }
-            // Если не нашли, ищем любой элемент с "R$"
-            const all = document.querySelectorAll('*');
-            for (const el of all) {
-                if (el.textContent.includes('R$') && el.children.length === 0) {
-                    const num = el.textContent.replace(/[^0-9]/g, '');
-                    const val = parseInt(num, 10);
-                    if (val > 0) return val;
-                }
-            }
-            return 0;
-        }
+    const apNotify = (msg, ok = true) => {
+        const toast = document.createElement('div');
+        toast.textContent = msg;
+        toast.style.cssText = `
+            position: fixed;
+            bottom: -60px;
+            right: 20px;
+            z-index: 9999;
+            background: ${ok ? 'rgba(0,167,107,0.95)' : 'rgba(195,66,66,0.95)'};
+            backdrop-filter: blur(6px);
+            color: white;
+            padding: 12px 18px;
+            border-radius: 8px;
+            border: 1px solid ${ok ? '#009963' : '#9b2f2f'};
+            font-family: "Gotham SSm A", "Helvetica Neue", Helvetica, Arial, sans-serif;
+            font-size: 13px;
+            font-weight: 500;
+            letter-spacing: 0.2px;
+            box-shadow: 0 4px 10px rgba(0,0,0,0.25);
+            transition: bottom 0.5s ease, opacity 0.4s ease;
+            opacity: 0;
+            text-transform: lowercase;
+        `;
+        document.body.appendChild(toast);
+        setTimeout(() => {
+            toast.style.bottom = '30px';
+            toast.style.opacity = '1';
+        }, 50);
+        setTimeout(() => {
+            toast.style.bottom = '-60px';
+            toast.style.opacity = '0';
+            setTimeout(() => toast.remove(), 600);
+        }, 3500);
+    };
 
-        function getSellerId() {
-            // Ищем ссылку на продавца
-            const sellerLink = document.querySelector('a[href*="/User.aspx?ID="], a[href*="/users/"][href*="?id="]');
-            if (sellerLink) {
-                const m = sellerLink.href.match(/[?&]id=(\d+)/);
-                if (m) return parseInt(m[1], 10);
-            }
-            // Ищем по тексту "by"
-            const byText = document.querySelector('[class*="creator"], .text-muted a');
-            if (byText) {
-                const m = byText.href.match(/[?&]id=(\d+)/);
-                if (m) return parseInt(m[1], 10);
-            }
-            return 1;
-        }
-
-        function notify(msg, ok) {
-            const div = document.createElement('div');
-            div.textContent = msg;
-            div.style.cssText = 'position:fixed;bottom:20px;right:20px;background:' + (ok ? '#27ae60' : '#e74c3c') + ';color:white;padding:10px 16px;border-radius:6px;font-family:Arial,sans-serif;font-size:13px;z-index:999999;box-shadow:0 2px 8px rgba(0,0,0,0.3);transition:opacity 0.3s;';
-            document.body.appendChild(div);
-            setTimeout(function() { div.style.opacity = '0'; setTimeout(function() { div.remove(); }, 400); }, 3000);
-        }
-
-        function purchase(id, price) {
-            return new Promise(function(resolve) {
-                const csrf = getCsrf();
-                if (!csrf) {
-                    notify('CSRF token not found', false);
-                    resolve(false);
-                    return;
-                }
-                const sellerId = getSellerId();
-                const payload = {
+    const purchase = async (id, price = 0) => {
+        const csrf = getApCsrf();
+        try {
+            const res = await fetch(`https://pekora.pro/apisite/economy/v1/purchases/products/${id}`, {
+                method: 'POST',
+                mode: 'same-origin',
+                credentials: 'include',
+                headers: {
+                    'accept': 'application/json, text/plain, */*',
+                    'content-type': 'application/json;charset=UTF-8',
+                    'x-csrf-token': csrf,
+                    'referer': location.href,
+                    'origin': 'https://pekora.pro'
+                },
+                body: JSON.stringify({
                     assetId: parseInt(id, 10),
                     expectedPrice: price,
-                    expectedSellerId: sellerId,
+                    expectedSellerId: getSellerId(),
                     expectedCurrency: 1,
                     userAssetId: null
-                };
-                GM_xmlhttpRequest({
-                    method: 'POST',
-                    url: 'https://pekora.pro/apisite/economy/v1/purchases/products/' + id,
-                    headers: {
-                        'Content-Type': 'application/json',
-                        'x-csrf-token': csrf,
-                        'Origin': 'https://pekora.pro',
-                        'Referer': location.href
-                    },
-                    data: JSON.stringify(payload),
-                    withCredentials: true,
-                    onload: function(resp) {
-                        try {
-                            const data = JSON.parse(resp.responseText);
-                            if (resp.status >= 200 && resp.status < 300 && data.purchased) {
-                                notify('Purchase successful!', true);
-                                setTimeout(function() { location.reload(); }, 1200);
-                                resolve(true);
-                            } else {
-                                const reason = data.reason || data.message || 'unknown error';
-                                notify('Failed: ' + reason, false);
-                                resolve(false);
-                            }
-                        } catch(e) {
-                            notify('Invalid response: ' + e.message, false);
-                            resolve(false);
-                        }
-                    },
-                    onerror: function() {
-                        notify('Network error', false);
-                        resolve(false);
-                    },
-                    ontimeout: function() {
-                        notify('Request timeout', false);
-                        resolve(false);
-                    }
-                });
+                })
             });
-        }
-
-        function addButton() {
-            const id = getItemId();
-            if (!id || document.getElementById('bypbtn')) return false;
-
-            const buyBtn = document.querySelector('button.newBuyButton-0-2-58, button[class*="newBuyButton"], button[class*="buyBtn"], button[class*="purchaseBtn"]');
-            if (!buyBtn || buyBtn.disabled) return false;
-            const container = buyBtn.parentElement;
-            if (!container) return false;
-
-            const btn = document.createElement('button');
-            btn.id = 'bypbtn';
-            btn.textContent = 'API Buy';
-            // Старый стиль – плоская кнопка, без скруглений
-            btn.style.cssText = 'display:inline-block;width:100%;margin-top:4px;background:#2ecc71;color:white;border:none;padding:6px 0;font-size:12px;font-weight:bold;cursor:pointer;text-align:center;text-transform:uppercase;letter-spacing:0.5px;';
-            btn.onclick = function(e) {
-                e.preventDefault();
-                if (this.disabled) return;
-                this.disabled = true;
-                this.textContent = 'Processing...';
-                this.style.background = '#888';
-                purchase(id, getPrice()).then(function(success) {
-                    btn.disabled = false;
-                    btn.textContent = 'API Buy';
-                    btn.style.background = '#2ecc71';
-                });
-            };
-            container.appendChild(btn);
-            return true;
-        }
-
-        function retry() {
-            if (apRetryTimer) clearTimeout(apRetryTimer);
-            let attempts = 0;
-            function fn() {
-                if (addButton()) return;
-                attempts++;
-                if (attempts < 20) apRetryTimer = setTimeout(fn, 400);
+            const text = await res.text();
+            let data = {};
+            try {
+                data = JSON.parse(text);
+            } catch {}
+            if (res.ok && data.purchased) {
+                apNotify('purchase successful');
+                setTimeout(() => location.reload(), 1500);
+            } else {
+                apNotify(`failed: ${data.reason || text}`, false);
             }
-            fn();
+        } catch (err) {
+            apNotify(`failed: ${err.message}`, false);
         }
+    };
 
-        const observer = new MutationObserver(function() {
-            if (getItemId() && !document.getElementById('bypbtn')) addButton();
-        });
-        observer.observe(document.body, { childList: true, subtree: true });
+    const purchase_button = () => {
+        const id = getItemId();
+        if (!id) return false;
+        if (document.querySelector('#bypbtn')) return true;
+
+        const buyButton = document.querySelector('button.newBuyButton-0-2-58') ||
+                          document.querySelector('button[class*="newBuyButton"]') ||
+                          document.querySelector('button[class*="buyBtn"]');
+        if (!buyButton || buyButton.disabled || buyButton.textContent.toLowerCase().includes('edit avatar')) {
+            return false;
+        }
+        const container = buyButton.parentElement;
+        if (!container) return false;
+
+        const btn = document.createElement('button');
+        btn.id = 'bypbtn';
+        btn.type = 'button';
+        btn.textContent = 'api buy';
+        btn.style.cssText = `
+            background: rgb(0,167,107) !important;
+            color: white !important;
+            margin-top: 6px;
+            border: none;
+            border-radius: 6px;
+            padding: 8px 16px;
+            font-family: "Gotham SSm A", "Helvetica Neue", Helvetica, Arial, sans-serif;
+            font-size: 14px;
+            font-weight: 600;
+            cursor: pointer;
+            width: 100%;
+            height: 40px;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            transition: all 0.25s ease;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+        `;
+        btn.onclick = async (e) => {
+            e.preventDefault();
+            if (btn.disabled) return;
+            btn.disabled = true;
+            btn.textContent = 'processing...';
+            btn.style.background = '#888!important';
+            btn.style.cursor = 'not-allowed';
+            btn.style.opacity = '0.75';
+            try {
+                await purchase(getItemId(), getPrice());
+            } finally {
+                btn.disabled = false;
+                btn.textContent = 'api buy';
+                btn.style.background = 'rgb(0,167,107)!important';
+                btn.style.cursor = 'pointer';
+                btn.style.opacity = '1';
+            }
+        };
+        container.appendChild(btn);
+        return true;
+    };
+
+    const start_retry = () => {
+        if (apRetryTimer) {
+            clearTimeout(apRetryTimer);
+            apRetryTimer = null;
+        }
+        let attempts = 0;
+        const maxAttempts = 20;
+        const retry = () => {
+            const id = getItemId();
+            if (!id) return;
+            const success = purchase_button();
+            if (success) return;
+            attempts++;
+            if (attempts < maxAttempts) {
+                apRetryTimer = setTimeout(retry, 300);
+            }
+        };
         retry();
-    })();
-}
+    };
+
+    const monitor_button = () => {
+        if (apObserver) apObserver.disconnect();
+        apObserver = new MutationObserver(() => {
+            const id = getItemId();
+            if (id && !document.querySelector('#bypbtn')) {
+                purchase_button();
+            }
+        });
+        apObserver.observe(document.body, { childList: true, subtree: true });
+    };
+
+    const apHandler = () => {
+        const currentUrl = location.href;
+        if (currentUrl === apLastUrl) return;
+        apLastUrl = currentUrl;
+        setTimeout(() => start_retry(), 100);
+    };
+
+    const apOrigPush = history.pushState;
+    history.pushState = function (...args) {
+        apOrigPush.apply(this, args);
+        apHandler();
+    };
+    const apOrigReplace = history.replaceState;
+    history.replaceState = function (...args) {
+        apOrigReplace.apply(this, args);
+        apHandler();
+    };
+    window.addEventListener('popstate', apHandler);
+
+    if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', () => {
+            start_retry();
+            monitor_button();
+        });
+    } else {
+        start_retry();
+        monitor_button();
+    }
+
+})();
 
     // ---- 12. Sidebar Buttons+ ----
     if (extEnabled(12)) {
