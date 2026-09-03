@@ -562,34 +562,102 @@ fill="none" stroke="currentColor" stroke-width="2">
             setTimeout(updateCollapse, 0);
         });
 
-        // Секция Whitelist/Blacklist (встроена в меню)
-        (function() {
-            const secHdr = document.createElement('div');
-            secHdr.className = 'korone-section-header';
-            secHdr.style.cssText = 'cursor:default;padding:10px 14px;background:#fafafa;border-bottom:1px solid #efefef;display:flex;align-items:center;justify-content:space-between;';
-            const label = document.createElement('span');
-            label.className = 'korone-section-label';
-            label.style.color = '#4f8ef7';
-            label.textContent = 'Whitelist / Blacklist';
-            const count = document.createElement('span');
-            count.style.cssText = 'color:#888;font-size:10px;';
-            count.textContent = blacklist.size + ' blacklisted, ' + whitelist.size + ' whitelisted';
-            secHdr.appendChild(label);
-            secHdr.appendChild(count);
-            const body = document.createElement('div');
-            body.className = 'korone-section-body';
-            body.style.cssText = 'padding:8px 14px;font-size:12px;';
-            body.innerHTML = `
-                <div style="margin-bottom:8px;">
-                    <button id="korone-export-lists" style="background:#111;color:#fff;border:none;padding:4px 10px;margin-right:6px;cursor:pointer;">Export Lists</button>
-                    <button id="korone-import-lists" style="background:#111;color:#fff;border:none;padding:4px 10px;cursor:pointer;">Import Lists</button>
-                </div>
-                <div style="margin-top:6px;font-size:11px;color:#888;">Blacklist: trades from these users will be hidden.<br>Whitelist: users will be highlighted in friends/search.</div>
-                <input type="file" id="korone-import-file" style="display:none;" accept=".json">
-            `;
-            rows.appendChild(secHdr);
-            rows.appendChild(body);
-        })();
+
+// Секция Whitelist/Blacklist (с работающим экспортом/импортом)
+(function() {
+    const secHdr = document.createElement('div');
+    secHdr.className = 'korone-section-header';
+    secHdr.style.cssText = 'cursor:default;padding:10px 14px;background:#fafafa;border-bottom:1px solid #efefef;display:flex;align-items:center;justify-content:space-between;';
+    const label = document.createElement('span');
+    label.className = 'korone-section-label';
+    label.style.color = '#4f8ef7';
+    label.textContent = 'Whitelist / Blacklist';
+    const count = document.createElement('span');
+    count.style.cssText = 'color:#888;font-size:10px;';
+    count.textContent = blacklist.size + ' blacklisted, ' + whitelist.size + ' whitelisted';
+    secHdr.appendChild(label);
+    secHdr.appendChild(count);
+    const body = document.createElement('div');
+    body.className = 'korone-section-body';
+    body.style.cssText = 'padding:8px 14px;font-size:12px;';
+
+    // Контейнер для кнопок
+    const btnDiv = document.createElement('div');
+    btnDiv.style.cssText = 'margin-bottom:8px;';
+
+    // Кнопка экспорта
+    const exportBtn = document.createElement('button');
+    exportBtn.textContent = 'Export Lists';
+    exportBtn.style.cssText = 'background:#111;color:#fff;border:none;padding:4px 10px;margin-right:6px;cursor:pointer;';
+    exportBtn.addEventListener('click', function() {
+        const data = {
+            blacklist: [...blacklist],
+            whitelist: [...whitelist]
+        };
+        const blob = new Blob([JSON.stringify(data, null, 2)], {type: 'application/json'});
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = 'pekora_lists.json';
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+    });
+
+    // Кнопка импорта
+    const importBtn = document.createElement('button');
+    importBtn.textContent = 'Import Lists';
+    importBtn.style.cssText = 'background:#111;color:#fff;border:none;padding:4px 10px;cursor:pointer;';
+    const fileInput = document.createElement('input');
+    fileInput.type = 'file';
+    fileInput.accept = '.json';
+    fileInput.style.display = 'none';
+    fileInput.addEventListener('change', function(e) {
+        const file = e.target.files[0];
+        if (!file) return;
+        const reader = new FileReader();
+        reader.onload = function(ev) {
+            try {
+                const data = JSON.parse(ev.target.result);
+                if (data.blacklist && Array.isArray(data.blacklist)) {
+                    blacklist = new Set(data.blacklist);
+                }
+                if (data.whitelist && Array.isArray(data.whitelist)) {
+                    whitelist = new Set(data.whitelist);
+                }
+                saveLists();
+                // Обновляем счётчик
+                count.textContent = blacklist.size + ' blacklisted, ' + whitelist.size + ' whitelisted';
+                alert('Lists imported successfully!');
+            } catch(err) {
+                alert('Invalid file format: ' + err.message);
+            }
+        };
+        reader.readAsText(file);
+        // Сбрасываем input, чтобы можно было повторно выбрать тот же файл
+        fileInput.value = '';
+    });
+    importBtn.addEventListener('click', function() {
+        fileInput.click();
+    });
+
+    btnDiv.appendChild(exportBtn);
+    btnDiv.appendChild(importBtn);
+    body.appendChild(btnDiv);
+
+    // Информационный текст
+    const info = document.createElement('div');
+    info.style.cssText = 'margin-top:6px;font-size:11px;color:#888;';
+    info.textContent = 'Blacklist: trades from these users will be hidden. Whitelist: users will be highlighted in friends/search.';
+    body.appendChild(info);
+
+    // Добавляем fileInput в body (он уже есть, но мы его создали и добавим)
+    body.appendChild(fileInput);
+
+    rows.appendChild(secHdr);
+    rows.appendChild(body);
+})();
 
         panel.appendChild(rows);
 
