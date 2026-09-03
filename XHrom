@@ -456,7 +456,7 @@ fill="none" stroke="currentColor" stroke-width="2">
         wrap.style.cssText = 'position:relative;display:flex;align-items:center;';
         const btn = document.createElement('button');
         btn.id = 'korone-ext-btn';
-        btn.title = 'PekoraExp';
+        btn.title = 'XHrom';
         btn.innerHTML = ICON_SVG;
         const overlay = document.createElement('div');
         overlay.id = 'korone-ext-overlay';
@@ -465,7 +465,7 @@ fill="none" stroke="currentColor" stroke-width="2">
 
         const hdr = document.createElement('div');
         hdr.id = 'korone-ext-panel-header';
-        hdr.innerHTML = `<span id="korone-ext-panel-title">PekoraExp</span><div id="korone-ext-panel-user"><img id="korone-ext-panel-avatar" src="" alt=""/><span id="korone-ext-panel-username">Hi, ...</span></div>`;
+        hdr.innerHTML = `<span id="korone-ext-panel-title">XHrom</span><div id="korone-ext-panel-user"><img id="korone-ext-panel-avatar" src="" alt=""/><span id="korone-ext-panel-username">Hi, ...</span></div>`;
         panel.appendChild(hdr);
 
         // Получаем информацию о пользователе (только для отображения)
