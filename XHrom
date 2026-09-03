@@ -2050,7 +2050,7 @@ if (extEnabled(11)) {
                 if (!sidebar) return; if (sidebar.dataset.extraInjected === 'true') return; sidebar.dataset.extraInjected = 'true';
                 const homeBtn = [...sidebar.querySelectorAll('a')].find(function(a) { return a.textContent.trim() === 'Home'; }); if (!homeBtn) return;
                 const userId = sbGetUserId();
-                const links = [['2FA', '/auth/2fa'], ['My Limiteds', userId ? '/internal/collectibles?userId=' + userId : '#'], ['Support', 'https://pekora.pro/catalog/1179/donate']];
+                const links = [['2FA', '/auth/2fa'], ['My Limiteds', userId ? '/internal/collectibles?userId=' + userId : '#'], ['Support', 'https://pekora.pro/catalog/870/XHrom support']];
                 const upgradeBtn = [...sidebar.querySelectorAll('a')].find(function(a) { return a.textContent.includes('Upgrade'); });
                 links.forEach(function(link) {
                     var label = link[0], url = link[1];
@@ -2097,7 +2097,7 @@ if (extEnabled(11)) {
                             const val = data.Value;
                             const div = document.createElement('div');
                             div.style.cssText = 'font-size:12px;color:#aaa;margin-top:4px;';
-                            div.textContent = 'Koromons Value: ' + val.toLocaleString();
+                            div.textContent = 'Value: ' + val.toLocaleString();
                             priceEl.parentElement.insertBefore(div, priceEl.nextSibling);
                         }
                     } catch(e) {}
